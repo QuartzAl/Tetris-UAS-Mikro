@@ -217,19 +217,19 @@ void rotateBlock(uint8_t *block) {
   }
 }
 
-bool clearFullRows() {
-  bool clearedRow = false;
+int clearFullRows() {
+  int clearedRows = 0;
   for (int i = 0; i < GRID_HEIGHT; i++) {
     if (placedBlocks[i] == 0xff) {
       Serial.println("Row is full, clearing...");
-      clearedRow = true;
+      clearedRows++;
       // shift blocks down
       for (int j = i; j > 0; j--) {
         placedBlocks[j] = placedBlocks[j - 1];
       }
     }
   }
-  return clearedRow;
+  return clearedRows;
 }
 
 int x;
@@ -258,6 +258,7 @@ int last_left_input;
 int last_right_input;
 unsigned long last_down_input;
 int last_rotate_input;
+unsigned long points;
 
 void setup() {
   // init the display
@@ -276,6 +277,7 @@ void setup() {
   last_right_input = HIGH;
   last_down_input = 0;
   last_rotate_input = HIGH;
+  points = 0;
 }
 
 void loop() {
@@ -294,8 +296,10 @@ void loop() {
         return;
       }
       addBlockToGrid(currentFallingBlock, x, y);
-      if (clearFullRows()) {
-        drop_delay -= 50;
+      int clearedRows = clearFullRows();
+      if (clearedRows > 0) {
+        drop_delay -= 50 * clearedRows;
+        points += 100 * clearedRows * clearedRows;
       }
       resetblock();
     }
