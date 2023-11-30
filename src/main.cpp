@@ -1,4 +1,5 @@
 #include <LEDMatrixDriver.hpp>
+
 #define LEDMATRIX_CS_PIN 7
 #define TETRIS_RIGHT_PIN 2
 #define TETRIS_LEFT_PIN 3
@@ -37,16 +38,6 @@ const uint8_t blocks[][4] = {
     {0x06, 0x03, 0x00, 0x00}, // Z
     {0x03, 0x06, 0x00, 0x00}  // S
 };
-
-// const uint8_t blocks[][4] = {
-//     {0x0e,0x15,0x1f,0x0e}, // L
-//     {0x09,0x00,0x09,0x06}, // J
-//     {0x0c,0x0a,0x0c,0x08}, // I
-//     {0x01,0x00,0x00,0x00}, // O
-//     {0x09,0x0f,0x0f,0x06}, // T
-//     {0x00,0x08,0x0f,0x0f}, // Z
-//     {0x08,0x08,0x0e,0x0a}  // S
-// };
 
 // 32 rows of 8 bits for the main grid that is displayed
 // extra 4 rows for the top of the grid as top safe area
@@ -146,16 +137,13 @@ bool willLand(uint8_t *block, int x, int y) {
 bool addBlockToGrid(uint8_t *block, int x, int y) {
   int gridBlockFeetIndex = y + getBlockFeetIndex(block);
   if (gridBlockFeetIndex > DISPLAY_Y_END) {
-    Serial.println("Block is out of bounds");
     return false;
   }
 
   int i = 0;
-  Serial.println("Adding block to grid");
   for (int rowGrid = y; rowGrid <= gridBlockFeetIndex; rowGrid++) {
     placedBlocks[rowGrid] =
         placedBlocks[rowGrid] | getBlockElement(block, x, i++);
-    printBinary(placedBlocks[rowGrid]);
   }
   return true;
 }
@@ -229,16 +217,19 @@ void rotateBlock(uint8_t *block) {
   }
 }
 
-void printBlock(uint8_t *block) {
-  for (int i = 0; i < 4; i++) {
-    printBinary(block[i]);
-  }
-}
-
-void printGrid() {
+bool clearFullRows() {
+  bool clearedRow = false;
   for (int i = 0; i < GRID_HEIGHT; i++) {
-    printBinary(placedBlocks[i]);
+    if (placedBlocks[i] == 0xff) {
+      Serial.println("Row is full, clearing...");
+      clearedRow = true;
+      // shift blocks down
+      for (int j = i; j > 0; j--) {
+        placedBlocks[j] = placedBlocks[j - 1];
+      }
+    }
   }
+  return clearedRow;
 }
 
 int x;
@@ -298,14 +289,14 @@ void loop() {
       Serial.println(y);
 
       if (y < DISPLAY_Y_START) {
-        printGrid();
         Serial.println("Game Over");
         resetGrid();
         return;
       }
       addBlockToGrid(currentFallingBlock, x, y);
-      // TODO: check if any rows are full, remove, and shift down
-
+      if (clearFullRows()) {
+        drop_delay -= 50;
+      }
       resetblock();
     }
     y++;
@@ -337,7 +328,6 @@ void loop() {
     uint8_t rotatedBlock[4];
     memcpy(rotatedBlock, currentFallingBlock, 4);
     rotateBlock(rotatedBlock);
-    printBlock(rotatedBlock);
 
     if (isValidXPosition(rotatedBlock, x, y)) {
       memcpy(currentFallingBlock, rotatedBlock, 4);
