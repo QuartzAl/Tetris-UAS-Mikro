@@ -1,8 +1,17 @@
 #include <LEDMatrixDriver.hpp>
+#include <TM1637Display.h>
+#include <Arduino.h>
 
+// Define the connections pins TM1637_CLK, TM1637_DIO
+#define CLK 9
+#define DIO 8
+
+// Define the connections pins LEDMatrix Max7219 chip select (the rest uses hardware SPI pins)
 #define LEDMATRIX_CS_PIN 7
-#define TETRIS_RIGHT_PIN 2
-#define TETRIS_LEFT_PIN 3
+
+// Define the connection pins for the buttons
+#define TETRIS_LEFT_PIN 2
+#define TETRIS_RIGHT_PIN 3
 #define TETRIS_DOWN_PIN 4
 #define TETRIS_ROTATE_PIN 5
 
@@ -17,6 +26,9 @@ struct coordVector {
 
 // The LEDMatrixDriver class instance
 LEDMatrixDriver lmd(LEDMATRIX_SEGMENTS, LEDMATRIX_CS_PIN);
+
+// The TM1637Display class instance
+TM1637Display display = TM1637Display(CLK, DIO);
 
 // Helper function to print a byte as binary for debugging
 void printBinary(uint8_t num) {
@@ -239,7 +251,7 @@ uint8_t currentFallingBlock[4];
 void resetblock() {
   x = 3;
 
-  memcpy(currentFallingBlock, blocks[random(7)], 4);
+  memcpy(currentFallingBlock, blocks[analogRead(A0) % 7], 4);
   y = DISPLAY_Y_START - getBlockFeetIndex(currentFallingBlock) - 1;
 }
 
@@ -248,6 +260,22 @@ void resetGrid() {
     placedBlocks[i] = 0x00;
   }
   resetblock();
+}
+
+void displayClosingAnimation() {
+  for (int i = 0; i < LEDMATRIX_WIDTH/2; i++) {
+    lmd.setColumn(i, 0xff);
+    lmd.setColumn(LEDMATRIX_WIDTH - 1 - i, 0xff);
+    lmd.display();
+    delay(50);
+  }
+  delay(100);
+  for (int i = 0; i < LEDMATRIX_WIDTH/2; i++) {
+    lmd.setColumn(i, 0x00);
+    lmd.setColumn(LEDMATRIX_WIDTH - 1 - i, 0x00);
+    lmd.display();
+    delay(50);
+  }
 }
 
 unsigned long last_time;
@@ -265,11 +293,18 @@ void setup() {
   Serial.begin(115200);
   lmd.setEnabled(true);
   lmd.setIntensity(0); // 0 = low, 10 = high
-  pinMode(TETRIS_RIGHT_PIN, INPUT_PULLUP);
+  display.setBrightness(4); // 0=dimmest, 7=brightest
+
   pinMode(TETRIS_LEFT_PIN, INPUT_PULLUP);
+  pinMode(TETRIS_RIGHT_PIN, INPUT_PULLUP);
   pinMode(TETRIS_DOWN_PIN, INPUT_PULLUP);
   pinMode(TETRIS_ROTATE_PIN, INPUT_PULLUP);
+
+  // random seed
+  pinMode(A0, INPUT);
+
   resetblock();
+
   last_time = millis();
   last_input = last_time;
   drop_delay = 500;
@@ -278,6 +313,7 @@ void setup() {
   last_down_input = 0;
   last_rotate_input = HIGH;
   points = 0;
+  display.showNumberDec(points, false, 4, 0);
 }
 
 void loop() {
@@ -293,27 +329,30 @@ void loop() {
       if (y < DISPLAY_Y_START) {
         Serial.println("Game Over");
         resetGrid();
+        displayClosingAnimation();
         return;
       }
       addBlockToGrid(currentFallingBlock, x, y);
       int clearedRows = clearFullRows();
       if (clearedRows > 0) {
-        drop_delay -= 50 * clearedRows;
-        points += 100 * clearedRows * clearedRows;
+        // drop_delay = drop_delay / 2;
+        points += 1 * clearedRows * clearedRows;
+        display.showNumberDec(points, false, 4, 0);
       }
       resetblock();
     }
     y++;
   }
 
-  if (digitalRead(TETRIS_RIGHT_PIN) == LOW &&
-      digitalRead(TETRIS_RIGHT_PIN) != last_right_input) {
+  if (digitalRead(TETRIS_LEFT_PIN) == LOW &&
+      digitalRead(TETRIS_LEFT_PIN
+    ) != last_right_input) {
     if (isValidXPosition(currentFallingBlock, x + 1, y)) {
       x++;
     }
   }
-  if (digitalRead(TETRIS_LEFT_PIN) == LOW &&
-      digitalRead(TETRIS_LEFT_PIN) != last_left_input) {
+  if (digitalRead(TETRIS_RIGHT_PIN) == LOW &&
+      digitalRead(TETRIS_RIGHT_PIN) != last_left_input) {
     if (isValidXPosition(currentFallingBlock, x - 1, y)) {
       x--;
     }
@@ -341,8 +380,9 @@ void loop() {
   }
   displayBlockAndGrid(currentFallingBlock, x, y);
 
-  last_left_input = digitalRead(TETRIS_LEFT_PIN);
-  last_right_input = digitalRead(TETRIS_RIGHT_PIN);
+  last_left_input = digitalRead(TETRIS_RIGHT_PIN);
+  last_right_input = digitalRead(TETRIS_LEFT_PIN
+);
   last_rotate_input = digitalRead(TETRIS_ROTATE_PIN);
   delay(50);
 }
